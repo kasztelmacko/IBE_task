@@ -70,15 +70,15 @@ def sort_mat(name):
 
 print("Zadania w pierwszym pomiarze (pretest):", sorted(zadania_pretest, key=sort_mat))
 print("Zadania w drugim pomiarze (posttest):  ", sorted(zadania_posttest, key=sort_mat))
-print()
 
 # Statystyki opisowe – pierwszy pomiar (pretest)
 pretest_stats = pretest[zadania_pretest].apply(pd.to_numeric, errors="coerce")
 stats_pretest = pretest_stats.describe().T[["count", "mean", "std"]]
-stats_pretest.columns = ["N", "średnia", "std"]
+stats_pretest
 
 # Statystyki opisowe – drugi pomiar (posttest)
 posttest_stats = posttest[zadania_posttest].apply(pd.to_numeric, errors="coerce")
 stats_posttest = posttest_stats.describe().T[["count", "mean", "std"]]
-stats_posttest.columns = ["N", "średnia", "std"]
+stats_posttest
 
+# %%
