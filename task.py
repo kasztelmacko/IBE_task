@@ -10,6 +10,7 @@ from factor_analyzer.factor_analyzer import calculate_bartlett_sphericity, calcu
 from factor_analyzer import FactorAnalyzer
 import pingouin as pg
 from girth import twopl_mml, threepl_mml, ability_eap
+import statsmodels.formula.api as smf
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -20,6 +21,8 @@ warnings.filterwarnings('ignore')
 # =============================================================================
 DATA_PATH = Path("task/math_data.csv")
 LOWER_MAT_THRESHOLD, UPPER_MAT_THRESHOLD = 0.05, 0.95
+RANDOM_SEED = 4321
+np.random.seed(RANDOM_SEED)
 
 # %%
 # =============================================================================
@@ -45,8 +48,6 @@ def _mat_sort_key(name):
 
 # %% Weryfikacja braków danych: Null tylko w kolumnach mat_ i oznacza brak zadania w danym pomiarze
 nulls_non_mat = data[non_mat_cols].isna().any(axis=1).sum()
-nulls_mat = data[mat_cols].isna().sum()
-
 print(f"Liczba brakujących wartości w kolumnach innych niż mat_*: {nulls_non_mat}")
 
 # %% Dla każdego pomiaru: które zadania mają odpowiedzi (nie-Null) vs które są puste (zadanie nie w pomiarze)
@@ -75,7 +76,7 @@ print(f"Uczniów tylko w postteście (brak w preteście): {len(tylko_posttest)}"
 
 # %%
 # =============================================================================
-# Step 2: Eskploracja danych
+# Step 2: Eksploracja danych
 # =============================================================================
 
 # %% Liczba szkół i uczniów w podziale na grupę
@@ -113,28 +114,19 @@ trudnosc_posttest = posttest_num.mean().reindex(
 
 ekstremalne_pretest = trudnosc_pretest[(trudnosc_pretest <= LOWER_MAT_THRESHOLD) | (trudnosc_pretest >= UPPER_MAT_THRESHOLD)]
 ekstremalne_posttest = trudnosc_posttest[(trudnosc_posttest <= LOWER_MAT_THRESHOLD) | (trudnosc_posttest >= UPPER_MAT_THRESHOLD)]
+print("Zadania ekstremalne (śr. <= 0.05 lub >= 0.95): pretest", ekstremalne_pretest.index.tolist() or "brak", "| posttest", ekstremalne_posttest.index.tolist() or "brak")
 
-fig_trudnosc = px.bar(
-    x=trudnosc_pretest.index,
-    y=trudnosc_pretest.values,
-    title="Trudność zadań – pretest (średni wynik)",
-    labels={"x": "Zadanie", "y": "Średni wynik"},
-)
-fig_trudnosc.update_yaxes(range=[0, 1])
-fig_trudnosc.add_hline(y=UPPER_MAT_THRESHOLD, line_dash="dash", line_color="red")
-fig_trudnosc.add_hline(y=LOWER_MAT_THRESHOLD, line_dash="dash", line_color="red")
-fig_trudnosc.show()
 
-fig_trudnosc_post = px.bar(
-    x=trudnosc_posttest.index,
-    y=trudnosc_posttest.values,
-    title="Trudność zadań – posttest (średni wynik)",
-    labels={"x": "Zadanie", "y": "Średni wynik"},
-)
-fig_trudnosc_post.update_yaxes(range=[0, 1])
-fig_trudnosc_post.add_hline(y=UPPER_MAT_THRESHOLD, line_dash="dash", line_color="red")
-fig_trudnosc_post.add_hline(y=LOWER_MAT_THRESHOLD, line_dash="dash", line_color="red")
-fig_trudnosc_post.show()
+def plot_trudnosc_bars(trudnosc_series, title):
+    fig = px.bar(x=trudnosc_series.index, y=trudnosc_series.values, title=title, labels={"x": "Zadanie", "y": "Średni wynik"})
+    fig.update_yaxes(range=[0, 1])
+    fig.add_hline(y=UPPER_MAT_THRESHOLD, line_dash="dash", line_color="red")
+    fig.add_hline(y=LOWER_MAT_THRESHOLD, line_dash="dash", line_color="red")
+    fig.show()
+
+
+plot_trudnosc_bars(trudnosc_pretest, "Trudność zadań – pretest (średni wynik)")
+plot_trudnosc_bars(trudnosc_posttest, "Trudność zadań – posttest (średni wynik)")
 
 # %%
 # =============================================================================
@@ -147,8 +139,8 @@ X_pretest = (
     .apply(pd.to_numeric, errors="coerce")
     .dropna(how="any")
 )
-chi_square, p_value = calculate_bartlett_sphericity(X_pretest)
-kmo_all, kmo_model = calculate_kmo(X_pretest)
+_, p_value = calculate_bartlett_sphericity(X_pretest)
+_, kmo_model = calculate_kmo(X_pretest)
 print(f"Pretest - Bartlett p-value: {p_value:.4f}, KMO: {kmo_model:.4f}")
 
 X_posttest = (
@@ -156,8 +148,8 @@ X_posttest = (
     .apply(pd.to_numeric, errors="coerce")
     .dropna(how="any")
 )
-chi_square, p_value = calculate_bartlett_sphericity(X_posttest)
-kmo_all, kmo_model = calculate_kmo(X_posttest)
+_, p_value = calculate_bartlett_sphericity(X_posttest)
+_, kmo_model = calculate_kmo(X_posttest)
 print(f"Posttest - Bartlett p-value: {p_value:.4f}, KMO: {kmo_model:.4f}")
 
 # %% scree plot
@@ -166,39 +158,34 @@ def create_scree_plot(data, title):
     fa.fit(data)
     ev, _ = fa.get_eigenvalues()
     
-    factors = list[int](range(1, len(ev) + 1))
-    
+    factors = list(range(1, len(ev) + 1))
     fig = go.Figure()
-
     fig.add_trace(go.Scatter(
-        x=factors, 
-        y=ev, 
-        mode='lines+markers',
-        name='Wartości własne',
-        marker=dict[str, int | str](size=10, color='royalblue'),
-        line=dict[str, int](width=3)
+        x=factors,
+        y=ev,
+        mode="lines+markers",
+        name="Wartości własne",
+        marker=dict(size=10, color="royalblue"),
+        line=dict(width=3),
     ))
-
     fig.add_shape(
         type="line",
         x0=1, y0=1, x1=max(factors), y1=1,
-        line=dict[str, str | int](color="Red", width=2, dash="dash"),
+        line=dict(color="red", width=2, dash="dash"),
     )
-
     fig.add_annotation(
-        x=max(factors)*0.9, y=1.2,
+        x=max(factors) * 0.9, y=1.2,
         text="Kryterium Kaisera (EV=1)",
         showarrow=False,
-        font=dict[str, str](color="red")
+        font=dict(color="red"),
     )
-
     fig.update_layout(
         title=title,
         xaxis_title="Numer czynnika",
         yaxis_title="Wartość własna (Eigenvalue)",
         template="plotly_white",
-        xaxis=dict[str, str | int](tickmode='linear', tick0=1, dtick=1),
-        hovermode="x unified"
+        xaxis=dict(tickmode="linear", tick0=1, dtick=1),
+        hovermode="x unified",
     )
 
     fig.show()
@@ -271,7 +258,7 @@ def plot_icc_curves(theta, curves, title, y_floor=0):
                 y=y,
                 mode="lines",
                 name=curve["label"],
-                line=dict[str, int](width=2),
+                line=dict(width=2),
             )
         )
     fig.add_vline(x=0, line_dash="dot", line_color="gray")
@@ -282,8 +269,8 @@ def plot_icc_curves(theta, curves, title, y_floor=0):
         title=title,
         xaxis_title="θ (umiejętność)",
         yaxis_title="P(poprawna odpowiedź)",
-        yaxis=dict[str, list[int]](range=[y_floor, 1]),
-        legend=dict[str, str | float](yanchor="top", y=0.99, xanchor="left", x=0.01),
+        yaxis=dict(range=[y_floor, 1]),
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
     )
     fig.show()
 
@@ -333,7 +320,7 @@ print(items_pretest_3pl)
 print("\nParametry IRT - 3PL (posttest):")
 print(items_posttest_3pl)
 
-# prawdopodobieństwo zgadniecia zadania (c) jest wszędzie bliske 0 co znaczy że zgadywanie nie ma dużego wpływu. Dlatego wybieramy 2PL.
+# Prawdopodobieństwo zgadnięcia (c) jest wszędzie bliskie 0 – zgadywanie nie ma dużego wpływu; wybieramy 2PL.
 
 # %% Wykres ICC 3PL:
 plot_icc_curves(
@@ -397,49 +384,50 @@ theta_posttest= ability_eap(
 theta_pretest_z = (theta_pretest - theta_pretest.mean()) / theta_pretest.std()
 theta_posttest_z = (theta_posttest - theta_posttest.mean()) / theta_posttest.std()
 
-theta_pre_series = pd.Series(theta_pretest_z, index=X_pretest.index, name='theta_pretest')
-theta_post_series = pd.Series(theta_posttest_z, index=X_posttest.index, name='theta_posttest')
+theta_pre_series = pd.Series(theta_pretest_z, index=X_pretest.index, name='theta_pretest_z')
+theta_post_series = pd.Series(theta_posttest_z, index=X_posttest.index, name='theta_posttest_z')
 
 
 # %%
 pretest_info = data.loc[X_pretest.index, ['id_szkoly', 'id_ucznia', 'grupa']].copy()
-pretest_info = pretest_info.assign(theta_pretest=theta_pre_series.values)
+pretest_info = pretest_info.assign(theta_pretest_z=theta_pre_series.values)
 posttest_info = data.loc[X_posttest.index, ['id_szkoly', 'id_ucznia', 'grupa']].copy()
-posttest_info = posttest_info.assign(theta_posttest=theta_post_series.values)
+posttest_info = posttest_info.assign(theta_posttest_z=theta_post_series.values)
 
 df_with_theta = pd.merge(
-    pretest_info[['id_ucznia', 'id_szkoly', 'grupa', 'theta_pretest']],
-    posttest_info[['id_ucznia', 'theta_posttest']],
+    pretest_info[['id_ucznia', 'id_szkoly', 'grupa', 'theta_pretest_z']],
+    posttest_info[['id_ucznia', 'theta_posttest_z']],
     on='id_ucznia',
     how='left'
 )
 
-# %% Weryfikacja rozkładu theta
+# %% Weryfikacja rozkładu theta (średnia, SD, skośność, kurtoza) + histogram
 def theta_describe(z, name):
-    series = pd.Series(z)
-    print(f"{name}:  średnia = {series.mean():.4f},  SD = {series.std():.4f},  skośność = {series.skew():.4f},  kurtoza = {series.kurtosis():.4f}")
+    s = pd.Series(z)
+    print(f"{name}:  średnia = {s.mean():.4f},  SD = {s.std():.4f},  skośność = {s.skew():.4f},  kurtoza = {s.kurtosis():.4f}")
 
 theta_describe(theta_pretest_z, "Theta pretest (z)")
 theta_describe(theta_posttest_z, "Theta posttest (z)")
+print("(Po standaryzacji: średnia ≈ 0, SD ≈ 1; normalność: skośność ≈ 0, kurtoza ≈ 0.)")
 
-fig_theta_pre = go.Figure()
-fig_theta_pre.add_trace(go.Histogram(x=theta_pretest_z, name="pretest", nbinsx=25))
-fig_theta_pre.add_vline(x=0, line_dash="dash", line_color="red", annotation_text="średnia = 0")
-fig_theta_pre.update_layout(
-    title="Rozkład theta pretest (z-score)",
-    xaxis_title="θ (z)",
-    yaxis_title="Liczba",
-)
-fig_theta_pre.show()
 
-fig_theta_post = go.Figure()
-fig_theta_post.add_trace(go.Histogram(x=theta_posttest_z, name="posttest", nbinsx=25))
-fig_theta_post.add_vline(x=0, line_dash="dash", line_color="red", annotation_text="średnia = 0")
-fig_theta_post.update_layout(
-    title="Rozkład theta posttest (z-score)",
-    xaxis_title="θ (z)",
-    yaxis_title="Liczba",
-)
-fig_theta_post.show()
+def plot_theta_histogram(z, title):
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(x=z, nbinsx=25))
+    fig.add_vline(x=0, line_dash="dash", line_color="red", annotation_text="średnia = 0")
+    fig.update_layout(title=title, xaxis_title="θ (z)", yaxis_title="Liczba")
+    fig.show()
+
+
+plot_theta_histogram(theta_pretest_z, "Rozkład theta pretest (z-score)")
+plot_theta_histogram(theta_posttest_z, "Rozkład theta posttest (z-score)")
 
 # %%
+# =============================================================================
+# Step 6: Weryfikacja hipotezy (model mieszany: efekt grupy + theta_pre, losowy intercept szkoły)
+# =============================================================================
+# statsmodels MixedLM: formula = tylko efekty stałe; groups = zmienna grupująca (losowy intercept)
+formula = "theta_posttest_z ~ grupa + theta_pretest_z"
+model = smf.mixedlm(formula, data=df_with_theta, groups=df_with_theta["id_szkoly"])
+result = model.fit()
+print(result.summary())
