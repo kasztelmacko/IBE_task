@@ -1,5 +1,5 @@
 Step 1:
-- Weryfikacja braków danych: sprawdzić czy Null jest tylko w kolumnach mat_ i oznacza że zadanie ni było w danym pomiarze
+- Weryfikacja braków danych: sprawdzić czy Null jest tylko w kolumnach mat_ i oznacza że zadanie nie było w danym pomiarze
 - Weryfikacja randomizacji: sprawdzić czy dana szkoła ma przypisaną tyko jedną grupę
 - sprawdź czy są uczniowie co byli w preteście ale nie w postteście
 
