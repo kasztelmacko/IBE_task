@@ -207,6 +207,12 @@ create_scree_plot(X_pretest, title="Scree Plot - Pretest (Pomiar 1)")
 
 # %%
 create_scree_plot(X_posttest, title="Scree Plot - Posttest (Pomiar 2)")
+
+# %%
+# =============================================================================
+# Step 4: CTT i IRT
+# =============================================================================
+
 # %% CTT jako baza - alfa cronbacha
 alpha_pre = pg.cronbach_alpha(data=X_pretest)
 print(f"Alfa Cronbacha (Pretest): {alpha_pre[0]:.3f} (CI: {alpha_pre[1]})")
@@ -220,3 +226,48 @@ item_discrimination_pre = X_pretest.apply(lambda col: col.corr(total_scores_pre)
 
 print("Moc dyskryminacyjna (Top 5 zadań - Pretest):")
 print(item_discrimination_pre.sort_values(ascending=False).head())
+
+# %% IRT 2PL
+matrix_pretest = X_pretest.to_numpy(dtype=int).T
+matrix_posttest = X_posttest.to_numpy(dtype=int).T
+
+estimates_pretest_2pl = twopl_mml(matrix_pretest)
+estimates_posttest_2pl = twopl_mml(matrix_posttest)
+
+items_pretest_2pl = pd.DataFrame({
+    'Trudność (b)': estimates_pretest_2pl['Difficulty'],
+    'Dyskryminacja (a)': estimates_pretest_2pl['Discrimination'],
+}, index=X_pretest.columns).reindex(sorted(X_pretest.columns, key=_mat_sort_key))
+
+items_posttest_2pl = pd.DataFrame({
+    'Trudność (b)': estimates_posttest_2pl['Difficulty'],
+    'Dyskryminacja (a)': estimates_posttest_2pl['Discrimination'],
+}, index=X_posttest.columns).reindex(sorted(X_posttest.columns, key=_mat_sort_key))
+
+print("Parametry IRT - 2PL (pretest):")
+print(items_pretest_2pl)
+print("\nParametry IRT - 2PL (posttest):")
+print(items_posttest_2pl)
+
+# %% IRT 3PL
+estimates_pretest_3pl = threepl_mml(matrix_pretest)
+estimates_posttest_3pl = threepl_mml(matrix_posttest)
+
+items_pretest_3pl = pd.DataFrame({
+    'Trudność (b)': estimates_pretest_3pl['Difficulty'],
+    'Dyskryminacja (a)': estimates_pretest_3pl['Discrimination'],
+    'Prawdopodobieństwo (c)': estimates_pretest_3pl['Guessing'],
+}, index=X_pretest.columns).reindex(sorted(X_pretest.columns, key=_mat_sort_key))
+
+items_posttest_3pl = pd.DataFrame({
+    'Trudność (b)': estimates_posttest_3pl['Difficulty'],
+    'Dyskryminacja (a)': estimates_posttest_3pl['Discrimination'],
+    'Prawdopodobieństwo (c)': estimates_posttest_3pl['Guessing'],
+}, index=X_posttest.columns).reindex(sorted(X_posttest.columns, key=_mat_sort_key))
+
+print("Parametry IRT - 3PL (pretest):")
+print(items_pretest_3pl)
+print("\nParametry IRT - 3PL (posttest):")
+print(items_posttest_3pl)
+
+# %%
