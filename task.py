@@ -9,7 +9,7 @@ import pandas as pd
 from factor_analyzer.factor_analyzer import calculate_bartlett_sphericity, calculate_kmo
 from factor_analyzer import FactorAnalyzer
 import pingouin as pg
-from girth import twopl_mml, threepl_mml
+from girth import twopl_mml, threepl_mml, ability_eap
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -378,5 +378,68 @@ plot_icc_curves(
     title="ICC dla wszystkich zadań pretestu (3PL)",
     y_floor=0,
 )
+
+# %%
+# =============================================================================
+# Step 5: Estymacja Theta
+# =============================================================================
+theta_pretest = ability_eap(
+    dataset=matrix_pretest, 
+    difficulty=estimates_pretest_2pl['Difficulty'], 
+    discrimination=estimates_pretest_2pl['Discrimination']
+)
+theta_posttest= ability_eap(
+    dataset=matrix_posttest, 
+    difficulty=estimates_posttest_2pl['Difficulty'], 
+    discrimination=estimates_posttest_2pl['Discrimination']
+)
+
+theta_pretest_z = (theta_pretest - theta_pretest.mean()) / theta_pretest.std()
+theta_posttest_z = (theta_posttest - theta_posttest.mean()) / theta_posttest.std()
+
+theta_pre_series = pd.Series(theta_pretest_z, index=X_pretest.index, name='theta_pretest')
+theta_post_series = pd.Series(theta_posttest_z, index=X_posttest.index, name='theta_posttest')
+
+
+# %%
+pretest_info = data.loc[X_pretest.index, ['id_szkoly', 'id_ucznia', 'grupa']].copy()
+pretest_info = pretest_info.assign(theta_pretest=theta_pre_series.values)
+posttest_info = data.loc[X_posttest.index, ['id_szkoly', 'id_ucznia', 'grupa']].copy()
+posttest_info = posttest_info.assign(theta_posttest=theta_post_series.values)
+
+df_with_theta = pd.merge(
+    pretest_info[['id_ucznia', 'id_szkoly', 'grupa', 'theta_pretest']],
+    posttest_info[['id_ucznia', 'theta_posttest']],
+    on='id_ucznia',
+    how='left'
+)
+
+# %% Weryfikacja rozkładu theta
+def theta_describe(z, name):
+    series = pd.Series(z)
+    print(f"{name}:  średnia = {series.mean():.4f},  SD = {series.std():.4f},  skośność = {series.skew():.4f},  kurtoza = {series.kurtosis():.4f}")
+
+theta_describe(theta_pretest_z, "Theta pretest (z)")
+theta_describe(theta_posttest_z, "Theta posttest (z)")
+
+fig_theta_pre = go.Figure()
+fig_theta_pre.add_trace(go.Histogram(x=theta_pretest_z, name="pretest", nbinsx=25))
+fig_theta_pre.add_vline(x=0, line_dash="dash", line_color="red", annotation_text="średnia = 0")
+fig_theta_pre.update_layout(
+    title="Rozkład theta pretest (z-score)",
+    xaxis_title="θ (z)",
+    yaxis_title="Liczba",
+)
+fig_theta_pre.show()
+
+fig_theta_post = go.Figure()
+fig_theta_post.add_trace(go.Histogram(x=theta_posttest_z, name="posttest", nbinsx=25))
+fig_theta_post.add_vline(x=0, line_dash="dash", line_color="red", annotation_text="średnia = 0")
+fig_theta_post.update_layout(
+    title="Rozkład theta posttest (z-score)",
+    xaxis_title="θ (z)",
+    yaxis_title="Liczba",
+)
+fig_theta_post.show()
 
 # %%
