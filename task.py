@@ -1,6 +1,7 @@
 # %%
 from pathlib import Path
 
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -249,6 +250,68 @@ print(items_pretest_2pl)
 print("\nParametry IRT - 2PL (posttest):")
 print(items_posttest_2pl)
 
+# %% Wykres ICC: uniwersalna funkcja 2PL i 3PL
+def create_icc_curve(theta, a, b, c=None):
+    """Uniwersalna krzywa ICC: 2PL (c=None) lub 3PL (c=zgadywanie)."""
+    p = 1 / (1 + np.exp(-a * (theta - b)))
+    if c is not None:
+        p = c + (1 - c) * p
+    return p
+
+
+def plot_icc_curves(theta, curves, title, y_floor=0):
+    """Rysuje krzywe ICC. curves: lista dictów z kluczami a, b, label oraz opcjonalnie c (3PL)."""
+    fig = go.Figure()
+    for curve in curves:
+        c = curve.get("c")
+        y = create_icc_curve(theta, curve["a"], curve["b"], c=c)
+        fig.add_trace(
+            go.Scatter(
+                x=theta,
+                y=y,
+                mode="lines",
+                name=curve["label"],
+                line=dict[str, int](width=2),
+            )
+        )
+    fig.add_vline(x=0, line_dash="dot", line_color="gray")
+    fig.add_hline(y=0.5, line_dash="dot", line_color="gray")
+    if y_floor > 0:
+        fig.add_hline(y=y_floor, line_dash="dot", line_color="gray", annotation_text="c (zgadywanie)")
+    fig.update_layout(
+        title=title,
+        xaxis_title="θ (umiejętność)",
+        yaxis_title="P(poprawna odpowiedź)",
+        yaxis=dict[str, list[int]](range=[y_floor, 1]),
+        legend=dict[str, str | float](yanchor="top", y=0.99, xanchor="left", x=0.01),
+    )
+    fig.show()
+
+
+theta = np.linspace(-3, 3, 301)
+
+# 2PL: Trudność (b)
+plot_icc_curves(
+    theta,
+    [
+        {"a": 1.5, "b": -1, "label": "Łatwe (b = -1)"},
+        {"a": 1.5, "b": 0, "label": "Średnie (b = 0)"},
+        {"a": 1.5, "b": 1.5, "label": "Trudne (b = 1.5)"},
+    ],
+    title="2PL: Położenie krzywej (Trudność b)",
+)
+
+# 2PL: Dyskryminacja (a)
+plot_icc_curves(
+    theta,
+    [
+        {"a": 0.5, "b": 0, "label": "Słaba dyskryminacja (a = 0.5)"},
+        {"a": 1.5, "b": 0, "label": "Średnia (a = 1.5)"},
+        {"a": 2.5, "b": 0, "label": "Silna dyskryminacja (a = 2.5)"},
+    ],
+    title="2PL: Nachylenie krzywej (Dyskryminacja a)",
+)
+
 # %% IRT 3PL
 estimates_pretest_3pl = threepl_mml(matrix_pretest)
 estimates_posttest_3pl = threepl_mml(matrix_posttest)
@@ -269,5 +332,51 @@ print("Parametry IRT - 3PL (pretest):")
 print(items_pretest_3pl)
 print("\nParametry IRT - 3PL (posttest):")
 print(items_posttest_3pl)
+
+# prawdopodobieństwo zgadniecia zadania (c) jest wszędzie bliske 0 co znaczy że zgadywanie nie ma dużego wpływu. Dlatego wybieramy 2PL.
+
+# %% Wykres ICC 3PL:
+plot_icc_curves(
+    theta,
+    [
+        {"a": 1.5, "b": 0, "label": "2PL (c = 0)"},
+        {"a": 1.5, "b": 0, "c": 0.2, "label": "3PL (c = 0.2)"},
+        {"a": 1.5, "b": 0, "c": 0.25, "label": "3PL (c = 0.25)"},
+    ],
+    title="3PL: Punkt startowy (zgadywanie c) – szansa na traf przy bardzo niskim θ",
+    y_floor=0.25,
+)
+
+# %% ICC dla wszystkich zadań pretestu (parametry z 2PL)
+curves_pretest_2pl = [
+    {
+        "a": row["Dyskryminacja (a)"],
+        "b": row["Trudność (b)"],
+        "label": idx,
+    }
+    for idx, row in items_pretest_2pl.iterrows()
+]
+plot_icc_curves(
+    theta,
+    curves_pretest_2pl,
+    title="ICC dla wszystkich zadań pretestu (2PL)",
+)
+
+# %% ICC dla wszystkich zadań pretestu (parametry z 3PL)
+curves_pretest_3pl = [
+    {
+        "a": row["Dyskryminacja (a)"],
+        "b": row["Trudność (b)"],
+        "c": row["Prawdopodobieństwo (c)"],
+        "label": idx,
+    }
+    for idx, row in items_pretest_3pl.iterrows()
+]
+plot_icc_curves(
+    theta,
+    curves_pretest_3pl,
+    title="ICC dla wszystkich zadań pretestu (3PL)",
+    y_floor=0,
+)
 
 # %%
